@@ -1,0 +1,278 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#176b45">
+<title>My Grocery Expenses</title>
+<style>
+* { box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #f4f6f8;
+  color: #222;
+}
+
+h1 { text-align: center; }
+
+.card {
+  background: white;
+  padding: 18px;
+  border-radius: 14px;
+  margin-bottom: 16px;
+}
+
+.small {
+  color: #666;
+  font-size: 13px;
+}
+
+.total {
+  font-size: 30px;
+  font-weight: bold;
+  margin-top: 6px;
+}
+
+input, button {
+  width: 100%;
+  padding: 13px;
+  margin: 7px 0;
+  font-size: 16px;
+  border-radius: 8px;
+}
+
+input { border: 1px solid #ccc; }
+
+button {
+  background: #176b45;
+  color: white;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.day-heading {
+  font-size: 16px;
+  font-weight: bold;
+  padding: 14px 0 6px;
+  border-bottom: 1px solid #ddd;
+}
+
+.item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.item-name {
+  overflow-wrap: anywhere;
+}
+
+.item-amount {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.empty {
+  color: #777;
+  padding: 12px 0;
+}
+</style>
+</head>
+
+<body>
+
+<h1>🛒 My Grocery Expenses</h1>
+
+<div class="card">
+  <div class="small" id="monthLabel">This month's total</div>
+  <div class="total" id="total">€0.00</div>
+</div>
+
+<div class="card">
+  <h3>Add a purchase</h3>
+
+  <input id="item"
+         placeholder="What did you buy? (e.g. Bread)"
+         autocomplete="off">
+
+  <input id="amount"
+         type="number"
+         min="0.01"
+         step="0.01"
+         placeholder="Amount (€)">
+
+  <label class="small" for="date">Purchase date</label>
+  <input id="date" type="date">
+
+  <button id="saveButton" type="button">Save purchase</button>
+</div>
+
+<div class="card">
+  <h3>Purchase history</h3>
+  <div id="history"></div>
+</div>
+
+<script>
+const KEY = "my-grocery-expenses-v1";
+
+let expenses;
+try {
+  expenses = JSON.parse(localStorage.getItem(KEY) || "[]");
+  if (!Array.isArray(expenses)) expenses = [];
+} catch {
+  expenses = [];
+}
+
+const itemInput = document.getElementById("item");
+const amountInput = document.getElementById("amount");
+const dateInput = document.getElementById("date");
+
+function localDateString(date = new Date()) {
+  return date.getFullYear() + "-" +
+    String(date.getMonth() + 1).padStart(2, "0") + "-" +
+    String(date.getDate()).padStart(2, "0");
+}
+
+dateInput.value = localDateString();
+
+function euro(amount) {
+  return amount.toLocaleString("en-AT", {
+    style: "currency",
+    currency: "EUR"
+  });
+}
+
+function save() {
+  localStorage.setItem(KEY, JSON.stringify(expenses));
+}
+
+function addExpense() {
+  const item = itemInput.value.trim();
+  const amount = Number(amountInput.value);
+  const date = dateInput.value;
+
+  if (!item || !Number.isFinite(amount) ||
+      amount <= 0 || !date) {
+    alert("Please enter the item, amount, and date.");
+    return;
+  }
+
+  expenses.push({
+    id: Date.now() + Math.random(),
+    item: item,
+    amount: amount,
+    date: date
+  });
+
+  save();
+
+  itemInput.value = "";
+  amountInput.value = "";
+
+  render();
+  itemInput.focus();
+}
+
+function formatDate(dateString) {
+  const parts = dateString.split("-").map(Number);
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
+
+function render() {
+  const selectedDate = dateInput.value || localDateString();
+  const monthKey = selectedDate.slice(0, 7);
+
+  const monthTotal = expenses
+    .filter(e => e.date && e.date.startsWith(monthKey))
+    .reduce((sum, e) => sum + Number(e.amount), 0);
+
+  const monthDate = new Date(
+    Number(monthKey.slice(0, 4)),
+    Number(monthKey.slice(5, 7)) - 1,
+    1
+  );
+
+  document.getElementById("monthLabel").textContent =
+    monthDate.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric"
+    }) + " total";
+
+  document.getElementById("total").textContent = euro(monthTotal);
+
+  const history = document.getElementById("history");
+  history.replaceChildren();
+
+  const sorted = [...expenses].sort((a, b) =>
+    b.date.localeCompare(a.date) || b.id - a.id
+  );
+
+  if (sorted.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No purchases recorded yet.";
+    history.append(empty);
+    return;
+  }
+
+  let currentDate = "";
+
+  sorted.forEach(e => {
+    if (e.date !== currentDate) {
+      currentDate = e.date;
+      const heading = document.createElement("div");
+      heading.className = "day-heading";
+      heading.textContent = formatDate(e.date);
+      history.append(heading);
+    }
+
+    const row = document.createElement("div");
+    row.className = "item";
+
+    const name = document.createElement("div");
+    name.className = "item-name";
+    name.textContent = e.item;
+
+    const amount = document.createElement("div");
+    amount.className = "item-amount";
+    amount.textContent = euro(Number(e.amount));
+
+    row.append(name, amount);
+    history.append(row);
+  });
+}
+
+document.getElementById("saveButton")
+  .addEventListener("click", addExpense);
+
+itemInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") amountInput.focus();
+});
+
+amountInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") addExpense();
+});
+
+dateInput.addEventListener("change", render);
+
+render();
+</script>
+
+</body>
+</html>
+
